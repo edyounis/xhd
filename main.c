@@ -65,13 +65,13 @@ int main ( void )
 		parse_config_entry( buf, keylist );
 	grab_all_keys(cur_group);
 
-	while (1) {
-		xcb_generic_event_t *ev = xcb_wait_for_event(conn);
-
+	xcb_generic_event_t *ev;
+	while ( ev = xcb_wait_for_event(conn) )
+	{
 		if (ev && ((ev->response_type & ~0x80) == XCB_KEY_PRESS))
 		{
 			xcb_key_press_event_t *kp = (xcb_key_press_event_t *)ev;
-			printf ("Got key press s: %d k: %d\n", (int)kp->state, (int)kp->detail);
+			//printf ("Got key press s: %d k: %d\n", (int)kp->state, (int)kp->detail);
 			int maxAction = keylist[cur_group][(int)kp->detail].num_actions;
 			int i;
 			for ( i = 0; i < maxAction; ++i )
@@ -96,7 +96,7 @@ int main ( void )
 				}
 			}
 		}
-
+		waitpid(-1, NULL, WNOHANG);
 		if (ev != NULL) {
 			free(ev);
 		}
@@ -111,7 +111,7 @@ int grab_all_keys ( uint8_t group )
 		int key = actionlist[group][key_index];
 		int keycode  = key & 0xFF;
 		int modifier = key >> 8;
-		printf("grabbing key %d with modifiers %d on group %d\n", keycode, modifier, group );
+		//printf("grabbing key %d with modifiers %d on group %d\n", keycode, modifier, group );
 		xcb_grab_key( conn, 0, root, modifier, keycode, XCB_GRAB_MODE_SYNC, XCB_GRAB_MODE_ASYNC );
 	}
 	xcb_flush(conn);
@@ -191,13 +191,11 @@ int parse_config_entry ( const char* entry, keylist_t kl )
 	int key_group_pairs[16];
 
 	int key_and_group = find_key_and_group( keysym, keylist, &num_key_group_pairs, key_group_pairs );
-	printf("%d\n", num_key_group_pairs);
+	//printf("%d\n", num_key_group_pairs);
 	for ( j = 0; j < num_key_group_pairs; ++j )
 	{
 		int key = key_group_pairs[j] & 0xFF;
 		int group = key_group_pairs[j] >> 8;
-
-		printf("keysym %d, keycode %d, modifier %d, group %d\n", keysym, key, modifier, group);
 
 		// Add action to the keylist
 		strcpy( keylist[group][key].actions[ keylist[group][key].num_actions ].action, action );
@@ -287,7 +285,7 @@ int parse_keymap ( keylist_t kl )
 	{
 		actionlist[group_index][0] = 0;
 	}
-
+	
 	int key_index;
 	int level_index;
 	int max_groups;
