@@ -5,6 +5,7 @@
 // Add debug option on command line
 // keypress vs keyrelease distinct
 // Serial vs Parallel commands in actions
+// Handle Errors more carefully
 
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-x11.h>
@@ -18,6 +19,7 @@
 #include <unistd.h>
 
 #include "xhd_types.h"
+#include "xhd_config.h"
 
 // We keep track MAX_KEY_CODE*MAX_GROUPS*MAX_LEVELS distinct keys.
 #define MAX_KEYCODE 256
@@ -367,7 +369,6 @@ int xhd_mode_parse_keymap ( void )
 				xkb_keymap_key_get_syms_by_level( keymap, key_index, group_index, level_index, (const xkb_keysym_t**)&keysym );
 				if ( keysym )
 				{
-					printf( "Parsed %d, %d, %d, %d\n", group_index, key_index, level_index, *keysym );
 					current.keymap[ group_index ][ key_index ][ level_index ].symbol = *keysym;
 				}
 			}
@@ -422,7 +423,6 @@ int xhd_mode_register_grab( uint32_t group_index, uint32_t key_index, uint8_t mo
 	grablist->list[ grablist->num_grabs ].keycode  = key_index;
 	grablist->list[ grablist->num_grabs ].modifier = modifier;
 	grablist->num_grabs++;
-	printf("Registered grab: %d %d %d\n", group_index, key_index, modifier);
 }
 
 /**
@@ -468,7 +468,6 @@ int xhd_mode_register_action ( xhd_key_t* key, uint8_t modifier, const char* com
 	action->num_cmds = 1; // TODO Change like everything about parsing to allow for command block
 	action->cmds     = (char**) malloc ( sizeof(char**) * action->num_cmds );
 	action->cmds[0]  = strdup( command );
-	printf("Registered: %d %s\n", modifier, command);
 	return 0;
 }
 
@@ -510,7 +509,7 @@ int xhd_mode_add_action ( const char* keystring, uint8_t modifier, const char* c
 
 					// Registers command with key code and modifier combination
 					xhd_mode_register_action( &current.keymap[group_index][key_index][level_index], modifier, command );
-					printf("Found: %s, %d,%d,%d,%d,%s\n", keystring, group_index, key_index, level_index, modifier, command );
+
 					// Adds to correct grab list
 					xhd_mode_register_grab( group_index, key_index, modifier );
 				}
@@ -756,7 +755,6 @@ int main ( void )
 		{
 			xcb_key_press_event_t* keypress = (xcb_key_press_event_t*) event;
 
-			printf ("Got key press s: %d k: %d\n", (int)keypress->state, (int)keypress->detail);
 
 			uint16_t keycode  = (uint16_t) keypress->detail;
 			uint16_t modifier = ((uint16_t) keypress->state) & 0x9FFF;
