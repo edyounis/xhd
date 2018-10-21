@@ -1,3 +1,8 @@
+// TODO
+// Add Escape Characters
+// Add Comments
+// Add multi-key lines
+
 #ifndef XHD_PARSE_LIB_H
 #define XHD_PARSE_LIB_H
 
@@ -40,9 +45,9 @@ typedef struct parser_t
 //* command = STRING
 
 static inline
-void errorf ( parser_t* parser, const char* error_msg )
+void xhd_config_print_error ( parser_t* parser )
 {
-	fprintf ( stderr, "%s\n Error on line %d.\n", error_msg, parser->lines_read );
+	fprintf ( stderr, "Config parse error on line %d.\n", parser->lines_read );
 }
 
 static inline
@@ -54,21 +59,30 @@ int xhd_config_is_whitespace ( char c )
 static inline
 int xhd_config_read_to_buf ( parser_t* parser )
 {
-	if ( parser->config != NULL )
+	if ( parser->config == NULL )
 	{
-		uint32_t newLen = fread( parser->buffer, sizeof(char), MAXBUFLEN, parser->config );
-
-		if ( ferror( parser->config ) != 0 )
-		{
-			fprintf( stderr, "Error reading file." );
-			return -1;
-		}
-
-		parser->buffer_index = 0;
-		parser->buffer_len   = newLen;
-
-		parser->buffer[ newLen++ ] = '\0';
+		fprintf( stderr, "Error reading file.\n" );
+		return -1;
 	}
+
+	if ( feof( parser->config ) )
+	{
+		fprintf( stderr, "Unexpected end-of-file.\n" );
+		return -1;
+	}
+
+	uint32_t newLen = fread( parser->buffer, sizeof(char), MAXBUFLEN, parser->config );
+
+	if ( ferror( parser->config ) != 0 )
+	{
+		fprintf( stderr, "Error reading file.\n" );
+		return -1;
+	}
+
+	parser->buffer_index = 0;
+	parser->buffer_len   = newLen;
+
+	parser->buffer[ newLen++ ] = '\0';
 }
 
 static inline
@@ -76,8 +90,8 @@ char xhd_config_read_char ( parser_t* parser )
 {
 	if ( parser->buffer_index >= parser->buffer_len )
 	{
-		xhd_config_read_to_buf( parser );
-		// if fail; fail gracefully
+		if ( xhd_config_read_to_buf( parser ) )
+			return 0;
 	}
 
 	char c = parser->buffer[ parser->buffer_index++ ];
@@ -86,6 +100,42 @@ char xhd_config_read_char ( parser_t* parser )
 		parser->lines_read++;
 
 	return c;
+}
+
+static inline
+char xhd_config_get_char ( parser_t* parser )
+{
+	if ( parser->buffer_index >= parser->buffer_len )
+	{
+		if ( xhd_config_read_to_buf( parser ) )
+			return 0;
+	}
+
+	return parser->buffer[ parser->buffer_index ];
+}
+
+static inline
+int xhd_config_expect ( parser_t* parser, char c )
+{
+	char d = xhd_config_read_char( parser );
+
+	if ( c != d )
+	{
+		fprintf( stderr, "Expected: %c, Got: %c\n", c, d );
+		xhd_config_print_error( parser );
+		return -1;
+	}
+
+	return 0;
+}
+
+static inline
+int xhd_config_trim_whitespace ( parser_t* parser )
+{
+	while ( xhd_config_is_whitespace( xhd_config_get_char( parser ) ) )
+		xhd_config_read_char( parser );
+
+	return 0;
 }
 
 static inline
@@ -138,7 +188,8 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 	{
 		if ( chr_index >= MAXKEYLEN - 1 )
 		{
-			// fail gracefully
+			xhd_config_print_error( parser );
+			return -1;
 		}
 
 		// Get next character
@@ -153,7 +204,9 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 		{
 			// Start reading next modifier
 			key_index++;
+			chr_index = 0;
 			memset( key_buf[key_index], 0, MAXKEYLEN );
+			continue;
 		}
 		else if ( c == '-' || c == '{' )
 		{
@@ -175,7 +228,7 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 
 		if ( tmp == (xhd_modifier_t) -1 )
 		{
-			// fail gracefully
+			fprintf( stderr, "Failed parsing modifier: %s\n", key_buf[i] );
 			return -1;
 		}
 
@@ -183,6 +236,9 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 	}
 
 	xkb_keysym_t keysym = xhd_config_parse_keysym( parser, key_buf[ key_index ] );
+
+	printf("\t key: %d, %d\n", modifier, keysym );
+	return 0;
 }
 
 int xhd_config_parse_flag ( parser_t* parser )
@@ -197,18 +253,14 @@ int xhd_config_parse_flag ( parser_t* parser )
 	{
 		if ( flag_index >= MAXFLAGLEN - 1 )
 		{
-			// fail gracefully
+			xhd_config_print_error( parser );
+			return -1;
 		}
 
 		// Get next character
 		c = xhd_config_read_char( parser );
 
-		if ( xhd_config_is_whitespace( c ) )
-		{
-			// Skip whitespaces
-			continue;
-		}
-		else if ( c == '{' )
+		if ( xhd_config_is_whitespace( c ) || c == '{' )
 		{
 			// End State
 			parser->buffer_index--;
@@ -217,16 +269,30 @@ int xhd_config_parse_flag ( parser_t* parser )
 
 		flag_buf[ flag_index++ ] = c;
 	}
+
+	printf( "\t%s\n", flag_buf );
+	return 0;
 }
 
 int xhd_config_parse_flag_list ( parser_t* parser )
 {
-	while ( parser->buffer[ parser->buffer_index ] != '{' )
-	{
-		xhd_config_parse_flag( parser );
-	}
-}
+	xhd_config_trim_whitespace( parser );
 
+	while ( xhd_config_get_char( parser ) != '{' )
+	{
+		if ( xhd_config_expect( parser, '-' ) )
+			return -1;
+
+		if ( xhd_config_expect( parser, '-' ) )
+			return -1;
+
+		if ( xhd_config_parse_flag( parser ) )
+			return -1;
+
+		xhd_config_trim_whitespace( parser );
+	}
+	return 0;
+}
 
 int xhd_config_parse_command ( parser_t* parser )
 {
@@ -240,18 +306,19 @@ int xhd_config_parse_command ( parser_t* parser )
 	{
 		if ( cmd_index >= MAXCMDLEN - 1 )
 		{
-			// fail gracefully
+			xhd_config_print_error( parser );
+			return -1;
 		}
 
 		// Get next character
 		c = xhd_config_read_char( parser );
 
-		if ( xhd_config_is_whitespace( c ) )
+		if ( c == '\r' )
 		{
-			// Skip whitespaces
+			// Skip carriage return
 			continue;
 		}
-		else if ( c == '\n')
+		else if ( c == '\n' )
 		{
 			// End State
 			// Swallow the new line
@@ -266,32 +333,63 @@ int xhd_config_parse_command ( parser_t* parser )
 
 		cmd_buf[ cmd_index++ ] = c;
 	}
+
+	printf( "\t\t%s\n", cmd_buf );
+	return 0;
 }
 
 int xhd_config_parse_command_list ( parser_t* parser )
 {
-	while ( parser->buffer[ parser->buffer_index ] != '}' )
+	xhd_config_trim_whitespace( parser );
+
+	while ( xhd_config_get_char( parser ) != '}' )
 	{
-		xhd_config_parse_command( parser );
+
+		if ( xhd_config_parse_command( parser ) )
+			return -1;
+
+		xhd_config_trim_whitespace( parser );
 	}
+
+	return 0;
 }
 
 int xhd_config_parse_hotkey_entry ( parser_t* parser )
 {
-	xhd_config_parse_keycombo( parser );
-	xhd_config_parse_flag_list( parser );
-	xhd_config_parse_command_list( parser );
+	if ( xhd_config_parse_keycombo( parser ) )
+		return -1;
+
+	if ( xhd_config_parse_flag_list( parser ) )
+		return -1;
+
+	if ( xhd_config_expect( parser, '{' ) )
+		return -1;
+
+	if ( xhd_config_parse_command_list( parser ) )
+		return -1;
+
+	if ( xhd_config_expect( parser, '}' ) )
+		return -1;
+
+	return 0;
 }
 
 int xhd_config_parse_hotkey_list ( parser_t* parser )
 {
-	while ( parser->buffer[ parser->buffer_index ] != '}' )
+	xhd_config_trim_whitespace( parser );
+
+	while ( xhd_config_get_char( parser ) != '}' )
 	{
-		xhd_config_parse_hotkey_entry( parser );
+		if ( xhd_config_parse_hotkey_entry( parser ) )
+			return -1;
+
+		xhd_config_trim_whitespace( parser );
 	}
+
+	return 0;
 }
 
-int xhd_config_parse_mode_entry ( parser_t* parser )
+int xhd_config_parse_mode_name ( parser_t* parser )
 {
 	char     c;
 	char     name_buf[ MAXNAMELEN ];
@@ -303,7 +401,8 @@ int xhd_config_parse_mode_entry ( parser_t* parser )
 	{
 		if ( name_index >= MAXNAMELEN - 1 )
 		{
-			// fail gracefully
+			xhd_config_print_error( parser );
+			return -1;
 		}
 
 		// Get next character
@@ -324,17 +423,35 @@ int xhd_config_parse_mode_entry ( parser_t* parser )
 		name_buf[ name_index++ ] = c;
 	}
 
-	xhd_config_parse_hotkey_list( parser );
+	printf( "%s\n", name_buf );
+	return 0;
+}
+
+int xhd_config_parse_mode_entry ( parser_t* parser )
+{
+	if ( xhd_config_parse_mode_name( parser ) )
+		return -1;
+
+	if ( xhd_config_expect( parser, '{' ) )
+		return -1;
+
+	if ( xhd_config_parse_hotkey_list( parser ) )
+		return -1;
+
+	if ( xhd_config_expect( parser, '}' ) )
+		return -1;
+
+	return 0;
 }
 
 int xhd_config_parse_config_file ( parser_t* parser )
 {
 	while ( ! feof( parser->config ) )
 	{
+		xhd_config_trim_whitespace( parser );
+
 		if ( xhd_config_parse_mode_entry( parser ) )
-		{
 			return -1;
-		}
 	}
 
 	return 0;
@@ -371,7 +488,8 @@ int xhd_config_parse ( void )
 		snprintf( config_path, sizeof(config_path), "%s/%s", config_home, ".config/xhd/config" );
 	}
 
-	FILE* config = fopen( config_path, "r" );
+	// FILE* config = fopen( config_path, "r" );
+	FILE* config = fopen( "config", "r" );
 
 	if ( config == NULL )
 	{
@@ -385,7 +503,11 @@ int xhd_config_parse ( void )
 	parser.lines_read   = 0;
 
 	// Parse File
-	xhd_config_parse_config_file( &parser );
+	if ( xhd_config_parse_config_file( &parser ) )
+	{
+		fprintf( stderr, "Failed to parse config file.\n" );
+		return -1;
+	}
 
 	// Close File
 	fclose( config );

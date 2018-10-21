@@ -520,152 +520,6 @@ int xhd_mode_add_action ( const char* keystring, uint8_t modifier, const char* c
 }
 
 /**
- * XHD Mode Parse Modifier Function
- *
- * Turns a modifier string to its bit
- */
-static inline
-int xhd_mode_parse_modifer ( const char* modifier )
-{
-	if ( strncasecmp( modifier, "shift", 5 ) == 0 )
-		return 1 << 0;
-	if ( strncasecmp( modifier, "lock", 4 ) == 0 )
-		return 1 << 1;
-	if ( strncasecmp( modifier, "ctrl", 4 ) == 0 )
-		return 1 << 2;
-	if ( strncasecmp( modifier, "mod1", 4 ) == 0 )
-		return 1 << 3;
-	if ( strncasecmp( modifier, "mod2", 4 ) == 0 )
-		return 1 << 4;
-	if ( strncasecmp( modifier, "mod3", 4 ) == 0 )
-		return 1 << 5;
-	if ( strncasecmp( modifier, "mod4", 4 ) == 0 )
-		return 1 << 6;
-	if ( strncasecmp( modifier, "mod5", 4 ) == 0 )
-		return 1 << 7;
-	return -1;
-}
-
-/**
- * XHD Mode Parse Config Entry Function
- *
- * Parses one entry of the config file
- */
-int xhd_mode_parse_config_entry ( const char* entry )
-{
-	if
-	(
-		entry == NULL ||
-		entry[0] == ' ' ||
-		entry[0] == '#' ||
-		entry[0] == '\n' ||
-		entry[0] == '\t'
-	)
-	{
-		return -1;
-	}
-
-	int entry_index   = 0;
-	int buf_index     = 0;
-	int buf_key_index = 0;
-	int action_index  = 0;
-	int action_flag   = 0;
-
-	char i = entry[0];
-	char key_buf[8][40];
-	char action[256];
-
-	memset( key_buf[buf_key_index], 0, 40 );
-	memset( action, 0, 256 );
-
-	// Read Character by character;
-	while( i )
-	{
-		if ( action_flag == 0 && i == ' ' )
-		{
-			action_flag = 1;
-		}
-		else if ( action_flag == 0 && i == '+' )
-		{
-			buf_index = 0;
-			++buf_key_index;
-
-			if ( buf_key_index >= 8 )
-				return -1;
-
-			memset( key_buf[buf_key_index], 0, 40 );
-		}
-		else if ( action_flag == 0 )
-		{
-			key_buf[buf_key_index][buf_index++] = i;
-		}
-		else if ( action_flag = 1)
-		{
-			action[action_index++] = i;
-		}
-
-		i = entry[ ++entry_index ];
-	}
-
-	uint8_t modifier = 0;
-
-	int j;
-	for ( j = 0; j < buf_key_index; ++j )
-	{
-		uint8_t tmp = xhd_mode_parse_modifer( key_buf[j] );
-
-		if ( tmp == (uint8_t)-1 )
-			return -1;
-
-		modifier |= (uint8_t) tmp;
-	}
-
-	xhd_mode_add_action( key_buf[buf_key_index], modifier, action );
-}
-
-/**
- * XHD Mode Parse Config File Function
- *
- * Parses the Entire Config File
- */
-int xhd_mode_parse_config_file( void )
-{
-	char config_path [256];
-	char buffer      [256];
-
-
-	char* config_home = getenv( "XDG_CONFIG_HOME" );
-
-	if ( config_home != NULL )
-	{
-		snprintf( config_path, sizeof(config_path), "%s/%s", config_home, "xhd/config" );
-	}
-	else
-	{
-		config_home = getenv( "HOME" );
-
-		if ( config_home == NULL )
-		{
-			fprintf( stderr, "Error; unable to find config file." );
-			return -1;
-		}
-
-		snprintf( config_path, sizeof(config_path), "%s/%s", config_home, ".config/xhd/config" );
-	}
-
-	FILE* config = fopen( config_path, "r" );
-
-	if ( config == NULL )
-	{
-		fprintf( stderr, "Error; cannot open config file.\n" );
-		return -1;
-	}
-
-	while ( fgets ( buffer, sizeof(buffer), config) != NULL )
-		xhd_mode_parse_config_entry( buffer );
-}
-
-/**
  * XHD Mode Load Function
  *
  * Parses X keymap table and config file
@@ -674,7 +528,7 @@ int xhd_mode_parse_config_file( void )
 int xhd_mode_load ( void )
 {
 	xhd_mode_parse_keymap();
-	xhd_mode_parse_config_file();
+	xhd_config_parse();
 	return 0;
 }
 
@@ -740,7 +594,7 @@ int main ( void )
 
 	xcb_generic_event_t* event;
 
-	while ( 1 )
+	while ( 0 )
 	{
 		// Take care of finished sub-processes
 		waitpid( -1, NULL, WNOHANG );
