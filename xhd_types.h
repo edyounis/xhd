@@ -2,6 +2,7 @@
 #define XHD_TYPES_LIB_H
 
 #define GRAB_LIST_SIZE 100
+#define MODE_LIST_SIZE 3
 
 typedef uint16_t xhd_modifier_t;
 typedef uint16_t xhd_keycode_t;
@@ -109,5 +110,20 @@ typedef struct xhd_mode_t
 	uint8_t       cur_group;	// Current Group/Layout
 
 } xhd_mode_t;
+
+/**
+ * An XHD Mode List
+ *
+ * Tracks all parsed modes and their key and grab tables
+ * Allows for each mode switching
+ */
+typedef struct xhd_modelist_t
+{
+	uint32_t cur_mode;		// The current mode
+	uint32_t num_modes;		// The number of modes in the list
+	uint32_t alloc_modes;	// The number of allocated mode slots
+	xhd_mode_t* modes;		// The list
+
+} xhd_modelist_t;
 
 #endif

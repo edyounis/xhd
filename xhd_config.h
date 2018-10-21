@@ -115,6 +115,12 @@ char xhd_config_get_char ( parser_t* parser )
 }
 
 static inline
+int xhd_config_is_next ( parser_t* parser )
+{
+	return ! feof( parser->config ) || parser->buffer_index < parser->buffer_len;
+}
+
+static inline
 int xhd_config_expect ( parser_t* parser, char c )
 {
 	char d = xhd_config_read_char( parser );
@@ -132,8 +138,11 @@ int xhd_config_expect ( parser_t* parser, char c )
 static inline
 int xhd_config_trim_whitespace ( parser_t* parser )
 {
-	while ( xhd_config_is_whitespace( xhd_config_get_char( parser ) ) )
+	while ( xhd_config_is_next( parser )
+	       	&& xhd_config_is_whitespace( xhd_config_get_char( parser ) ) )
+	{
 		xhd_config_read_char( parser );
+	}
 
 	return 0;
 }
@@ -446,12 +455,14 @@ int xhd_config_parse_mode_entry ( parser_t* parser )
 
 int xhd_config_parse_config_file ( parser_t* parser )
 {
-	while ( ! feof( parser->config ) )
-	{
-		xhd_config_trim_whitespace( parser );
+	xhd_config_trim_whitespace( parser );
 
+	while ( xhd_config_is_next( parser ) )
+	{
 		if ( xhd_config_parse_mode_entry( parser ) )
 			return -1;
+
+		xhd_config_trim_whitespace( parser );
 	}
 
 	return 0;
