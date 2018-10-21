@@ -11,12 +11,16 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "xhd_modes.h"
+#include "xhd_config.h"
+
 #define MAXBUFLEN	512
 #define MAXCOMBOLEN	8
 #define MAXKEYLEN	40
 #define MAXNAMELEN	40
 #define MAXFLAGLEN	40
 #define MAXCMDLEN	256
+#define DEFAULTCMDS 4
 
 /**
  * Parser State Object
@@ -28,6 +32,8 @@ typedef struct parser_t
 	uint32_t buffer_index;
 	uint32_t buffer_len;
 	char     buffer[ MAXBUFLEN + 1 ];
+
+	xhd_modelist_t* modelist;
 
 } parser_t;
 
@@ -54,6 +60,12 @@ static inline
 int xhd_config_is_whitespace ( char c )
 {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static inline
+int xhd_config_is_next ( parser_t* parser )
+{
+	return ! feof( parser->config ) || parser->buffer_index < parser->buffer_len;
 }
 
 static inline
@@ -112,12 +124,6 @@ char xhd_config_get_char ( parser_t* parser )
 	}
 
 	return parser->buffer[ parser->buffer_index ];
-}
-
-static inline
-int xhd_config_is_next ( parser_t* parser )
-{
-	return ! feof( parser->config ) || parser->buffer_index < parser->buffer_len;
 }
 
 static inline
@@ -183,7 +189,7 @@ xkb_keysym_t xhd_config_parse_keysym ( parser_t* parser, const char* keystring )
 	return keysym;
 }
 
-int xhd_config_parse_keycombo ( parser_t* parser )
+int xhd_config_parse_keycombo ( parser_t* parser, xkb_keysym_t* keysym, xhd_modifier_t* modifier )
 {
 	char     c;
 	char     key_buf[MAXCOMBOLEN][MAXKEYLEN];
@@ -228,7 +234,7 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 	}
 
 	// Parse the key_buf into modifiers
-	xhd_modifier_t modifier = 0;
+	*modifier = 0;
 
 	int i;
 	for ( i = 0; i < key_index; ++i )
@@ -241,12 +247,11 @@ int xhd_config_parse_keycombo ( parser_t* parser )
 			return -1;
 		}
 
-		modifier |= tmp;
+		*modifier |= tmp;
 	}
 
-	xkb_keysym_t keysym = xhd_config_parse_keysym( parser, key_buf[ key_index ] );
+	*keysym = xhd_config_parse_keysym( parser, key_buf[ key_index ] );
 
-	printf("\t key: %d, %d\n", modifier, keysym );
 	return 0;
 }
 
@@ -303,10 +308,9 @@ int xhd_config_parse_flag_list ( parser_t* parser )
 	return 0;
 }
 
-int xhd_config_parse_command ( parser_t* parser )
+int xhd_config_parse_command ( parser_t* parser, char* cmd_buf )
 {
 	char     c;
-	char     cmd_buf[ MAXCMDLEN ];
 	uint32_t cmd_index = 0;
 
 	memset( cmd_buf, 0, MAXCMDLEN );
@@ -343,18 +347,21 @@ int xhd_config_parse_command ( parser_t* parser )
 		cmd_buf[ cmd_index++ ] = c;
 	}
 
-	printf( "\t\t%s\n", cmd_buf );
 	return 0;
 }
 
-int xhd_config_parse_command_list ( parser_t* parser )
+int xhd_config_parse_command_list ( parser_t* parser, xhd_action_t* action )
 {
+	char cmd_buf[ MAXCMDLEN ];
+
 	xhd_config_trim_whitespace( parser );
 
 	while ( xhd_config_get_char( parser ) != '}' )
 	{
+		if ( xhd_config_parse_command( parser, cmd_buf ) )
+			return -1;
 
-		if ( xhd_config_parse_command( parser ) )
+		if ( xhd_modes_register_command( action, cmd_buf ) )
 			return -1;
 
 		xhd_config_trim_whitespace( parser );
@@ -365,16 +372,32 @@ int xhd_config_parse_command_list ( parser_t* parser )
 
 int xhd_config_parse_hotkey_entry ( parser_t* parser )
 {
-	if ( xhd_config_parse_keycombo( parser ) )
+	xkb_keysym_t   keysym   = 0;
+	xhd_modifier_t modifier = 0;
+
+	if ( xhd_config_parse_keycombo( parser, &keysym, &modifier ) )
 		return -1;
 
 	if ( xhd_config_parse_flag_list( parser ) )
 		return -1;
 
+	// TODO: Add flag semantics
+
 	if ( xhd_config_expect( parser, '{' ) )
 		return -1;
 
-	if ( xhd_config_parse_command_list( parser ) )
+	// Create new action
+	xhd_action_t action;
+	action.num_cmds   = 0;
+	action.alloc_cmds = 0;
+	action.cmds       = NULL;
+	action.mod        = modifier;
+
+	if ( xhd_config_parse_command_list( parser, &action ) )
+		return -1;
+
+	if ( xhd_modes_add_action ( &parser->modelist->modes[ parser->modelist->cur_mode ],
+	                       		keysym, &action ) )
 		return -1;
 
 	if ( xhd_config_expect( parser, '}' ) )
@@ -398,13 +421,12 @@ int xhd_config_parse_hotkey_list ( parser_t* parser )
 	return 0;
 }
 
-int xhd_config_parse_mode_name ( parser_t* parser )
+int xhd_config_parse_mode_name ( parser_t* parser, char* name_buf )
 {
 	char     c;
-	char     name_buf[ MAXNAMELEN ];
 	uint32_t name_index = 0;
 
-	memset( name_buf, 0, MAXNAMELEN );
+	memset( name_buf, 0, MAXNAMELEN + 1 );
 
 	while ( 1 )
 	{
@@ -432,14 +454,20 @@ int xhd_config_parse_mode_name ( parser_t* parser )
 		name_buf[ name_index++ ] = c;
 	}
 
-	printf( "%s\n", name_buf );
 	return 0;
 }
 
 int xhd_config_parse_mode_entry ( parser_t* parser )
 {
-	if ( xhd_config_parse_mode_name( parser ) )
+	char name_buf[ MAXNAMELEN ];
+
+	if ( xhd_config_parse_mode_name( parser, name_buf ) )
 		return -1;
+
+	if ( xhd_modes_register_mode( parser->modelist, name_buf ) )
+		return -1;
+
+	parser->modelist->cur_mode = parser->modelist->num_modes;
 
 	if ( xhd_config_expect( parser, '{' ) )
 		return -1;
@@ -474,7 +502,7 @@ int xhd_config_parse_config_file ( parser_t* parser )
  * This is the start of the config file parser.
  * It opens the file, starts the parser, and closes the file.
  */
-int xhd_config_parse ( void )
+int xhd_config_parse ( xhd_modelist_t* modelist )
 {
 	parser_t parser;
 	char config_path [256];
@@ -512,6 +540,7 @@ int xhd_config_parse ( void )
 	parser.buffer_index = 0;
 	parser.buffer_len   = 0;
 	parser.lines_read   = 0;
+	parser.modelist     = modelist;
 
 	// Parse File
 	if ( xhd_config_parse_config_file( &parser ) )
@@ -519,6 +548,8 @@ int xhd_config_parse ( void )
 		fprintf( stderr, "Failed to parse config file.\n" );
 		return -1;
 	}
+
+	parser.modelist->cur_mode = 0;
 
 	// Close File
 	fclose( config );

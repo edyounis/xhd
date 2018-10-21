@@ -2,10 +2,11 @@
 #define XHD_TYPES_LIB_H
 
 #define GRAB_LIST_SIZE 100
-#define MODE_LIST_SIZE 3
+#define MODE_LIST_SIZE 1
 
 typedef uint16_t xhd_modifier_t;
 typedef uint16_t xhd_keycode_t;
+typedef uint8_t  xhd_group_t;
 
 /**
  * An XHD Action Object
@@ -18,6 +19,8 @@ typedef uint16_t xhd_keycode_t;
 typedef struct xhd_action_t
 {
 	xhd_modifier_t mod;			// Modifier flags
+
+	uint32_t       alloc_cmds;	// Number of command slots
 	uint32_t       num_cmds;	// Number of commands
 	char**         cmds;		// List of commands
 
@@ -105,9 +108,10 @@ typedef xhd_grablist_t* xhd_grabmap_t;
  */
 typedef struct xhd_mode_t
 {
+	char*         name;			// The name of this mode
 	xhd_grabmap_t grabs;		// The Grab Map
 	xhd_keymap_t  keymap;		// The Key Map
-	uint8_t       cur_group;	// Current Group/Layout
+	xhd_group_t   cur_group;	// Current Group/Layout
 
 } xhd_mode_t;
 
