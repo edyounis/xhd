@@ -447,7 +447,6 @@ int xhd_modes_register_action ( xhd_key_t* key, xhd_action_t* action )
 
 		free( key->acts );
 		key->acts = tmp;
-		return 0;
 	}
 
 	key->acts[ key->num_acts++ ] = *action;
@@ -488,7 +487,6 @@ int xhd_modes_register_command ( xhd_action_t* action, const char* cmd )
 
 		free( action->cmds );
 		action->cmds = tmp;
-		return 0;
 	}
 
 	action->cmds[ action->num_cmds++ ] = strdup( cmd );

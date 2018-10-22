@@ -467,13 +467,13 @@ int xhd_config_parse_mode_entry ( parser_t* parser )
 	if ( xhd_modes_register_mode( parser->modelist, name_buf ) )
 		return -1;
 
-	parser->modelist->cur_mode = parser->modelist->num_modes;
-
 	if ( xhd_config_expect( parser, '{' ) )
 		return -1;
 
 	if ( xhd_config_parse_hotkey_list( parser ) )
 		return -1;
+
+	parser->modelist->cur_mode = parser->modelist->num_modes;
 
 	if ( xhd_config_expect( parser, '}' ) )
 		return -1;

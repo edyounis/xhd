@@ -189,7 +189,10 @@ int xhd_runtime_grab_all_keys ( xhd_mode_t* mode )
 	xhd_grab_t* list  = mode->grabs[ mode->cur_group ].list;
 
 	for ( i = 0; i < max_i; ++i )
+	{
+		printf("Grabbing key s=%d, k=%d\n", list[i].modifier, list[i].keycode );
 		xcb_grab_key( conn, 0, root, list[i].modifier, list[i].keycode, XCB_GRAB_MODE_SYNC, XCB_GRAB_MODE_ASYNC );
+	}
 
 	xcb_flush( conn );
 	return 0;
@@ -245,10 +248,10 @@ int main ( void )
 		{
 			xcb_key_press_event_t* keypress = (xcb_key_press_event_t*) event;
 
-
 			uint16_t keycode  = (uint16_t) keypress->detail;
 			uint16_t modifier = ((uint16_t) keypress->state) & 0x9FFF;
 			uint16_t level    = modifier & 1;
+			printf("Got keypress s=%d, k=%d\n", modifier, keycode );
 
 			xhd_key_t* key = &modelist.modes[ modelist.cur_mode ].keymap[ modelist.modes[ modelist.cur_mode ].cur_group ][ keycode ][ level ];
 
