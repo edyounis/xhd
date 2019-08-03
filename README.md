@@ -1,3 +1,5 @@
+## This project has been abandoned. I recommend everyone check out wayland.
+
 Config Grammar:
 
 config_file = mode_entry | config_file, mode_entry ;  
